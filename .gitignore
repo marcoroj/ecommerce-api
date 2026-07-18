@@ -1,0 +1,27 @@
+# Archivos compilados
+bin/
+obj/
+
+# Configuración de Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Archivos de Rider / VS Code
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Configuración local sensible
+appsettings.Development.json
+
+# Paquetes
+packages/
