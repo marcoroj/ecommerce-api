@@ -1,6 +1,8 @@
 ﻿using ECommerce.Api.Data;
+using ECommerce.Api.DTOs;
 using ECommerce.Api.DTOs.Categories;
 using ECommerce.Api.Entities;
+using ECommerce.Api.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,18 +13,29 @@ namespace ECommerce.Api.Controllers
     public class CategoriesController:ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly IHttpContextAccessor _contextAccessor;
         
-        public CategoriesController(ApplicationDbContext context)
+        public CategoriesController(ApplicationDbContext context,IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
+            _contextAccessor = httpContextAccessor;
         }
 
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CategoryResponseDto>>> Get()
+        public async Task<ActionResult<IEnumerable<CategoryResponseDto>>> Get([FromQuery]PaginationDto paginationDto)
         {
-            var categories=await _context.Categories.Where(x=>x.IsActive).ToListAsync();
-            var categoriesResponseDto = categories
+            var queryable = _context.Categories.Where(x => x.IsActive).AsQueryable();
+
+            await _contextAccessor.HttpContext.InsertarPaginacionHeader(queryable);
+
+            var response = await queryable
+                .OrderBy(x => x.Id)
+                .Paginate(paginationDto)
+                .ToListAsync();
+
+            //var categories=await _context.Categories.Where(x=>x.IsActive).ToListAsync();
+            var categoriesResponseDto = response
                 .Select(cat=>new CategoryResponseDto
                 {
                     Id=cat.Id,

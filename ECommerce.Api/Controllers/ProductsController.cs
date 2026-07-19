@@ -1,7 +1,9 @@
 ﻿using ECommerce.Api.Data;
+using ECommerce.Api.DTOs;
 using ECommerce.Api.DTOs.Categories;
 using ECommerce.Api.DTOs.Products;
 using ECommerce.Api.Entities;
+using ECommerce.Api.Utils;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,21 +15,34 @@ namespace ECommerce.Api.Controllers
     public class ProductsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
-        public ProductsController(ApplicationDbContext context)
+        private readonly IHttpContextAccessor _contextAccessor;
+        public ProductsController(ApplicationDbContext context,IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
+            _contextAccessor = httpContextAccessor;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductResponseDto>>> Get()
+        public async Task<ActionResult<IEnumerable<ProductResponseDto>>> Get([FromQuery]PaginationDto paginationDto)
         {
-            var products = await _context.Products
-                .Where(p => p.IsActive)
-                .Include(p => p.Categories)
-                .ThenInclude(p=>p.Category)
+            var queryable=_context.Products.Where(x=>x.IsActive).AsQueryable();
+
+            await _contextAccessor.HttpContext.InsertarPaginacionHeader(queryable);
+
+            var response=await queryable
+                .Include(x=>x.Categories)
+                .ThenInclude(x=>x.Category)
+                .OrderBy(x=>x.Id)
+                .Paginate(paginationDto)
                 .ToListAsync();
 
-            var productsDto = products
+            //var products = await _context.Products
+            //    .Where(p => p.IsActive)
+            //    .Include(p => p.Categories)
+            //    .ThenInclude(p=>p.Category)
+            //    .ToListAsync();
+
+            var productsDto = response
                 .Select(prod => new ProductResponseDto
                 {
                     Id = prod.Id,
