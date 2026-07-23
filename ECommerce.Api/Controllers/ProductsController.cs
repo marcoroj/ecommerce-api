@@ -3,6 +3,7 @@ using ECommerce.Api.DTOs;
 using ECommerce.Api.DTOs.Categories;
 using ECommerce.Api.DTOs.Products;
 using ECommerce.Api.Entities;
+using ECommerce.Api.Services;
 using ECommerce.Api.Utils;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
@@ -16,23 +17,27 @@ namespace ECommerce.Api.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IHttpContextAccessor _contextAccessor;
-        public ProductsController(ApplicationDbContext context,IHttpContextAccessor httpContextAccessor)
+        private readonly IAlmacenadorArchivos _almacenadorArchivos;
+        private const string contenedor = "productos-imagenes";
+
+        public ProductsController(ApplicationDbContext context, IHttpContextAccessor httpContextAccessor, IAlmacenadorArchivos almacenadorArchivos)
         {
             _context = context;
             _contextAccessor = httpContextAccessor;
+            _almacenadorArchivos = almacenadorArchivos;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductResponseDto>>> Get([FromQuery]PaginationDto paginationDto)
+        public async Task<ActionResult<IEnumerable<ProductResponseDto>>> Get([FromQuery] PaginationDto paginationDto)
         {
-            var queryable=_context.Products.Where(x=>x.IsActive).AsQueryable();
+            var queryable = _context.Products.Where(x => x.IsActive).AsQueryable();
 
             await _contextAccessor.HttpContext.InsertarPaginacionHeader(queryable);
 
-            var response=await queryable
-                .Include(x=>x.Categories)
-                .ThenInclude(x=>x.Category)
-                .OrderBy(x=>x.Id)
+            var response = await queryable
+                .Include(x => x.Categories)
+                .ThenInclude(x => x.Category)
+                .OrderBy(x => x.Id)
                 .Paginate(paginationDto)
                 .ToListAsync();
 
@@ -57,10 +62,119 @@ namespace ECommerce.Api.Controllers
                     .Select(x => new CategoryResponseDto
                     {
                         Id = x.CategoryId,
-                        Name=x.Category?.Name
+                        Name = x.Category?.Name
                     }).ToList()
                 });
             return Ok(productsDto);
+        }
+
+
+        [HttpGet("filtros")]
+        public async Task<ActionResult<IEnumerable<ProductResponseDto>>> Get([FromQuery] PaginationDto paginationDto, [FromQuery] ProductFiltroDto productFiltroDto)
+        {
+            var queryable = _context.Products.AsQueryable();
+
+            if (!string.IsNullOrEmpty(productFiltroDto.Name))
+            {
+                queryable = queryable.Where(x => x.Name.Contains(productFiltroDto.Name));
+            }
+
+            if (productFiltroDto.StockMenorACinco.HasValue)
+            {
+                if (productFiltroDto.StockMenorACinco.Value)
+                {
+                    queryable = queryable.Where(x => x.Stock < 5);
+                }
+            }
+
+            if (productFiltroDto.TieneImagen.HasValue)
+            {
+                if (productFiltroDto.TieneImagen.Value)
+                {
+                    queryable = queryable.Where(x => x.ImageUrl != null);
+                }
+                else
+                {
+                    queryable = queryable.Where(x => x.ImageUrl == null);
+                }
+
+            }
+
+            if(productFiltroDto.PrecioMinimo.HasValue 
+                && productFiltroDto.PrecioMaximo.HasValue)
+            {
+                var priceMin= productFiltroDto.PrecioMinimo.Value;
+                var priceMax = productFiltroDto.PrecioMaximo.Value;
+                queryable = queryable
+                    .Where(x => x.Price >= priceMin && x.Price <= priceMax);
+            }
+
+
+
+            await _contextAccessor.HttpContext.InsertarPaginacionHeader(queryable);
+
+            var response = await queryable
+                .Include(x => x.Categories)
+                .ThenInclude(x => x.Category)
+                .OrderBy(x => x.Id)
+                .Paginate(paginationDto)
+                .ToListAsync();
+
+            var productsDto = response
+                .Select(prod => new ProductResponseDto
+                {
+                    Id = prod.Id,
+                    Name = prod.Name,
+                    Description = prod.Description,
+                    SKU = prod.SKU,
+                    Stock = prod.Stock,
+                    Price = prod.Price,
+                    ImageUrl = prod.ImageUrl,
+                    CreatedAt = prod.CreatedAt,
+                    Categories = prod.Categories
+                    .Select(x => new CategoryResponseDto
+                    {
+                        Id = x.CategoryId,
+                        Name = x.Category?.Name
+                    }).ToList()
+                });
+            return Ok(productsDto);
+        }
+
+        [HttpGet("otro-get")]
+        public async Task<ActionResult<IEnumerable<ProductResponseDto>>> Get
+            ([FromQuery] int pageSize = 10, [FromQuery] int pageIndex = 1, [FromQuery] string nameFilterProduct = "")
+        {
+            var plantillaQuery = _context.Products
+                .Include(x => x.Categories)
+                .ThenInclude(x => x.Category)
+                .Where(x => x.IsActive)
+                .Where(x => x.Name.Contains(nameFilterProduct))
+                .Skip((pageIndex - 1) * pageSize)
+                .Take(pageSize);
+
+            var ejecutandoConsultaYObteniendoDatos = await plantillaQuery.ToListAsync();
+
+            var responseDto = ejecutandoConsultaYObteniendoDatos.Select(prod => new ProductResponseDto
+            {
+                Id = prod.Id,
+                Name = prod.Name,
+                Description = prod.Description,
+                SKU = prod.SKU,
+                Stock = prod.Stock,
+                Price = prod.Price,
+                ImageUrl = prod.ImageUrl,
+                CreatedAt = prod.CreatedAt,
+                Categories = prod.Categories
+                    .Select(x => new CategoryResponseDto
+                    {
+                        Id = x.CategoryId,
+                        Name = x.Category?.Name
+                    }).ToList()
+            });
+
+            return Ok(responseDto);
+
         }
 
 
@@ -92,7 +206,7 @@ namespace ECommerce.Api.Controllers
                 .Select(x => new CategoryResponseDto
                 {
                     Id = x.CategoryId,
-                    Name=x.Category?.Name
+                    Name = x.Category?.Name
 
                 }).ToList()
             };
@@ -101,7 +215,7 @@ namespace ECommerce.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult> Create(ProductCreateDto productCreateDto)
+        public async Task<ActionResult> Create([FromForm] ProductCreateDto productCreateDto)
         {
             if (productCreateDto.CategoryIds is null || productCreateDto.CategoryIds.Count == 0)
             {
@@ -125,6 +239,8 @@ namespace ECommerce.Api.Controllers
                 return ValidationProblem();
             }
 
+
+
             var product = new Product
             {
                 Name = productCreateDto.Name,
@@ -132,11 +248,18 @@ namespace ECommerce.Api.Controllers
                 SKU = productCreateDto.SKU,
                 // Redondeamos a 2 decimales usando el "redondeo comercial" (hacia el número más lejano de cero)
                 Price = Math.Round(productCreateDto.Price, 2, MidpointRounding.AwayFromZero),
-                ImageUrl = productCreateDto.ImageUrl,
+                //ImageUrl = productCreateDto.ImageUrl,
                 Categories = productCreateDto.CategoryIds
                 .Select(x => new CategoryProduct { CategoryId = x }).ToList(),
                 Stock = productCreateDto.Stock,
             };
+
+            if (productCreateDto.ImageUrl is not null)
+            {
+                var url = await _almacenadorArchivos.Almacenar(contenedor, productCreateDto.ImageUrl);
+                product.ImageUrl = url;
+
+            }
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
 
@@ -162,10 +285,10 @@ namespace ECommerce.Api.Controllers
         }
 
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, ProductUpdateDto productUpdateDto)
+        public async Task<IActionResult> Update(int id, [FromForm] ProductUpdateDto productUpdateDto)
         {
             var product = await _context.Products
-                .Include(x=>x.Categories)
+                .Include(x => x.Categories)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (product is null)
@@ -193,11 +316,17 @@ namespace ECommerce.Api.Controllers
                     $"Las siguientes categorias no existe:{categoriesStringNoExists}");
                 return ValidationProblem();
             }
-            
+
+            if (productUpdateDto.ImageUrl is not null)
+            {
+                var url = await _almacenadorArchivos.RemplazarArchivo
+                    (product.ImageUrl, contenedor, productUpdateDto.ImageUrl);
+                product.ImageUrl = url;
+            }
+
             product.Name = productUpdateDto.Name;
             product.Description = productUpdateDto.Description;
             product.Price = productUpdateDto.Price;
-            product.ImageUrl = productUpdateDto.ImageUrl;
             product.SKU = productUpdateDto.SKU;
             product.Stock = productUpdateDto.Stock;
             product.Categories = productUpdateDto.CategoryIds
@@ -212,7 +341,7 @@ namespace ECommerce.Api.Controllers
         public async Task<IActionResult> Patch(int id, JsonPatchDocument<ProductPatchDto> patchDoc)
         {
             var product = await _context.Products
-                .Include(x=>x.Categories)
+                .Include(x => x.Categories)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (product is null)

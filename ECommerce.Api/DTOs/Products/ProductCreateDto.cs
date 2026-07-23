@@ -17,11 +17,8 @@ namespace ECommerce.Api.DTOs.Products
         [Required(ErrorMessage = "El campo {0} es requerido.")]
         [Range(0, double.MaxValue, ErrorMessage = "El campo {0} no puede ser negativo.")]
         public decimal Price { get; set; }
-
-        [StringLength(500, ErrorMessage = "El campo {0} no puede superar los {1} caracteres.")]
-        public string? ImageUrl { get; set; }
+        public IFormFile? ImageUrl { get; set; }
         [Required(ErrorMessage = "El campo {0} es requerido")]
-        [Range(1, int.MaxValue, ErrorMessage = "El campo {0} no puede ser negativo.")]
         public List<int> CategoryIds { get; set; } = new List<int>();
     }
 }
