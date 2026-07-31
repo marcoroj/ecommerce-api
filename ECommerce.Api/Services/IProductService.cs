@@ -1,6 +1,5 @@
 ﻿using ECommerce.Api.DTOs;
 using ECommerce.Api.DTOs.Products;
-using Microsoft.AspNetCore.Mvc;
 
 namespace ECommerce.Api.Services
 {
@@ -10,5 +9,8 @@ namespace ECommerce.Api.Services
         Task<ProductResponseDto?> GetByIdAync(int id);
         Task<ProductResponseDto> CreateAsync(ProductCreateDto productCreateDto);
         Task<bool> UpdateAsync(int id,ProductUpdateDto productUpdateDto);
+        Task<bool> UpdatePatchAsync(int id,ProductPatchDto patchDocument);
+        Task<ProductPatchDto?> GetPatchDtoForUpdate(int id);
+        Task<bool> DeleteLogicAsync(int id);
     }
 }

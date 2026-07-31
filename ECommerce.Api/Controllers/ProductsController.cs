@@ -73,89 +73,63 @@ namespace ECommerce.Api.Controllers
             }
         }
 
-        //[HttpPatch("{id:int}")]
-        //public async Task<IActionResult> Patch(int id, JsonPatchDocument<ProductPatchDto> patchDoc)
-        //{
-        //    var product = await _context.Products
-        //        .Include(x => x.Categories)
-        //        .FirstOrDefaultAsync(p => p.Id == id);
+        [HttpPatch("{id:int}")]
+        public async Task<IActionResult> Patch(int id, JsonPatchDocument<ProductPatchDto> patchDoc)
+        {
+            if (patchDoc is null)
+            {
+                return BadRequest();
+            }
 
-        //    if (product is null)
-        //    {
-        //        return NotFound();
-        //    }
+            var productPathDto = await _productService.GetPatchDtoForUpdate(id);
 
-        //    var productPatchDto = new ProductPatchDto()
-        //    {
-        //        Name = product.Name,
-        //        Description = product.Description,
-        //        SKU = product.SKU,
-        //        Stock = product.Stock,
-        //        CategoryIds = product.Categories.Select(x => x.CategoryId).ToList(),
-        //        ImageUrl = product.ImageUrl,
-        //        Price = product.Price
-        //    };
-        //    //aplicando los cambios que vienen del doc patch del cliente a los campos
-        //    //respectivos del dto
-        //    patchDoc.ApplyTo(productPatchDto, ModelState);
+            if (productPathDto is null)
+            {
+                return NotFound(new { message = $"El producto con id {id} no existe." });
+            }
 
-        //    var isValidProduct = TryValidateModel(productPatchDto);
+            //aplicar los cambios del json doc al dto
 
-        //    if (!isValidProduct)
-        //    {
-        //        return ValidationProblem();
-        //    }
-        //    // Verificando si las categorias existen en la DB
-        //    if (productPatchDto.CategoryIds is null || productPatchDto.CategoryIds.Count == 0)
-        //    {
-        //        ModelState.AddModelError(nameof(productPatchDto.CategoryIds),
-        //            "No se puede actualizar producto sin categoria");
-        //        return ValidationProblem();
-        //    }
+            patchDoc.ApplyTo(productPathDto, ModelState);
 
-        //    var categoryIdsExists = await _context.Categories
-        //        .Where(x => productPatchDto.CategoryIds.Contains(x.Id))
-        //        .Select(x => x.Id)
-        //        .ToListAsync();
+            var isValidDto = TryValidateModel(productPathDto);
+            if (!isValidDto)
+            {
 
-        //    if (categoryIdsExists.Count != productPatchDto.CategoryIds.Count)
-        //    {
-        //        var categoriesNoExists = productPatchDto.CategoryIds.Except(categoryIdsExists);
-        //        var categoriesStringNoExists = string.Join(",", categoriesNoExists);
-        //        ModelState.AddModelError(nameof(productPatchDto.CategoryIds),
-        //            $"Las siguientes categorias no existe:{categoriesStringNoExists}");
-        //        return ValidationProblem();
-        //    }
+                return ValidationProblem(ModelState);
+            }
 
-        //    //actualizando el state de la entidad producto traida de la db
+            try
+            {
+                // presistiendo los cambios en la DB
+                var productDb = await _productService.UpdatePatchAsync(id, productPathDto);
+                if (!productDb)
+                {
+                    return NotFound(new { message = $"El producto con id {id} no existe." });
+                }
+                return NoContent();
+            }
+            catch (ArgumentException ex)
+            {
+                var key = ex.ParamName ?? string.Empty;
+                ModelState.AddModelError(key, ex.Message);
+                return ValidationProblem(ModelState);
+            }
 
-        //    product.Name = productPatchDto.Name;
-        //    product.Description = productPatchDto.Description;
-        //    product.Price = productPatchDto.Price;
-        //    product.ImageUrl = productPatchDto.ImageUrl;
-        //    product.SKU = productPatchDto.SKU;
-        //    product.Stock = productPatchDto.Stock;
-        //    product.Categories = productPatchDto.CategoryIds
-        //        .Select(x => new CategoryProduct { CategoryId = x }).ToList();
+        }
 
-        //    await _context.SaveChangesAsync();
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var productDb = await _productService.DeleteLogicAsync(id);
+            if (!productDb)
+            {
+                return NotFound(new { message = $"El producto con id {id} no existe" });
+            }
+            return NoContent();
 
-        //    return NoContent();
-        //}
 
-        //[HttpDelete("{id:int}")]
-        //public async Task<IActionResult> Delete(int id)
-        //{
-        //    var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
-        //    if (product is null)
-        //    {
-        //        return NotFound();
-        //    }
-        //    product.IsActive = false;
-
-        //    await _context.SaveChangesAsync();
-        //    return NoContent();
-        //}
+        }
 
     }
 }

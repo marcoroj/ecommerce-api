@@ -4,6 +4,7 @@ using ECommerce.Api.DTOs.Categories;
 using ECommerce.Api.DTOs.Products;
 using ECommerce.Api.Entities;
 using ECommerce.Api.Utils;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
@@ -208,6 +209,8 @@ namespace ECommerce.Api.Services
 
         }
 
+       
+
         public async Task<bool> UpdateAsync(int id, ProductUpdateDto productUpdateDto)
         {
             var product = await _context.Products
@@ -261,6 +264,95 @@ namespace ECommerce.Api.Services
             
         }
 
-      
+
+        public async Task<ProductPatchDto?> GetPatchDtoForUpdate(int id)
+        {
+            var product=await _context.Products
+                .Include(pcl=>pcl.Categories)
+                .ThenInclude(pc=>pc.Category)
+                .FirstOrDefaultAsync(x=>x.Id== id);
+            if(product is null)
+            {
+                return null;
+            }
+            var productDto = new ProductPatchDto
+            {
+                Name = product.Name,
+                Description = product.Description,
+                SKU = product.SKU,
+                Stock = product.Stock,
+                Price = product.Price,
+                ImageUrl = product.ImageUrl,
+                CategoryIds = product.Categories
+                .Select(x => x.CategoryId).ToList(),
+
+            };
+            return productDto;
+
+        }
+        public async Task<bool> UpdatePatchAsync(int id, ProductPatchDto productPatchDto)
+        {
+            var product = await _context.Products
+               .Include(x => x.Categories)
+               .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (product is null)
+            {
+                return false;
+            }
+
+            // Verificando si las categorias existen en la DB
+            if (productPatchDto.CategoryIds is null || productPatchDto.CategoryIds.Count == 0)
+            {
+                throw new ArgumentException("No se puede actualizar producto sin categoria",
+                    nameof(productPatchDto.CategoryIds));
+                
+            }
+
+            var categoryIdsExists = await _context.Categories
+                .Where(x => productPatchDto.CategoryIds.Contains(x.Id))
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            if (categoryIdsExists.Count != productPatchDto.CategoryIds.Count)
+            {
+                var categoriesNoExists = productPatchDto.CategoryIds.Except(categoryIdsExists);
+                var categoriesStringNoExists = string.Join(",", categoriesNoExists);
+                throw new ArgumentException(
+                    $"Las siguientes categorias no existe:{categoriesStringNoExists}"
+                    , nameof(productPatchDto.CategoryIds));
+                
+            }
+
+            //actualizando el state de la entidad producto obtenida de la db
+
+            product.Name = productPatchDto.Name;
+            product.Description = productPatchDto.Description;
+            product.Price = productPatchDto.Price;
+            product.ImageUrl = productPatchDto.ImageUrl;
+            product.SKU = productPatchDto.SKU;
+            product.Stock = productPatchDto.Stock;
+            product.Categories = productPatchDto.CategoryIds
+                .Select(x => new CategoryProduct { CategoryId = x }).ToList();
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<bool> DeleteLogicAsync(int id)
+        {
+            var product = await _context.Products
+                .Where(x=>x.IsActive)
+                .FirstOrDefaultAsync(p => p.Id == id);
+            if (product is null)
+            {
+                return false;
+            }
+            product.IsActive = false;
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
     }
 }
